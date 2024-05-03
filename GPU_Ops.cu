@@ -69,6 +69,10 @@ double expSum(double* Y, int Units) {
 	return(y_esum);
 }
 
+__global__ void kern3(double** X, double** Y, int sam, double esum_y) {
+	int idx = blockDim.x * blockIdx.x + threadIdx.x;
+	Y[sam][idx] = exp(X[sam][idx]) / esum_y;
+}
 
 // NormExp(double**  X, double** Y,int S, int U): returns the normalized exponential of the matrix X
 // X is a a matrix of size SxU
@@ -77,13 +81,13 @@ double expSum(double* Y, int Units) {
 // S = number of input samples
 
 void NormExp(double** X, double** Y, int S, int U) {
-
+	dim3 dim(U);
 	double esum_y;
 	for (int sam = 0; sam < S; sam++) {
 		esum_y = expSum(X[sam], U);
-		for (int u = 0; u < U; u++) {
-			Y[sam][u] = exp(X[sam][u]) / esum_y;
-		}
+		//for (int u = 0; u < U; u++) {
+			kern3<<<dim>>>(X, Y, sam, esum_y);
+		//}
 	}
 }
 
