@@ -43,6 +43,12 @@ void ForwardGPU(double** X, double** Y, double** W, int S, int inF, int Units) {
 
 }
 
+__global__ void kern2(double** X, double** Y) {
+	int idx = blockDim.x * blockIdx.x + threadIdx.x;
+	int idy = blockDim.y * blockIdx.y + threadIdx.y;
+	Y[idy][idx] = 1.0 / (1.0 + exp(-X[idy][idx]));
+}
+
 // SigmoidAct(double** X, double ** Y, int S, int Units) : Applies Sigmoid Activation to the SxUnits input matrix Y
 // X = Input matrix
 // Y = Output Matrix
@@ -50,11 +56,8 @@ void ForwardGPU(double** X, double** Y, double** W, int S, int inF, int Units) {
 // U = Number of Units
 
 void SigmoidAct(double** X, double** Y, int S, int Units) {
-	for (int sam = 0; sam < S; sam++) {
-		for (int u = 0; u < Units; u++) {
-			Y[sam][u] = sigmoid(X[sam][u]);
-		}
-	}
+	dim3 dims(Units, S);
+	kern2<<<dims>>>(X, Y);
 }
 
 // expSum(Y, Units): calculates the sum of natural exponential of all the Units of Y
