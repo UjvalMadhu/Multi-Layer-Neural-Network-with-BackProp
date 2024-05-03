@@ -197,6 +197,11 @@ void backProp_O(uint8_t** Y, double** Y_O, double** Z_O, double** Y_1, double** 
 
 }
 
+__global__ void kern8(float** delta, u_int8_t** Y, float** Y_O, float** WO, int j, int sam) {
+	int idx = blockDim.x * blockIdx.x + threadIdx.x;
+	delta[j][0] += (Y[sam][idx] / Y_O[sam][idx]) * (Y_O[sam][idx] * (1 - Y_O[sam][idx])) * WO[j + 1][idx];
+}
+
 // Void backProp_H()
 // Calculates the derivative of the cost w.r.t the weights for the Hidden layer
 // Y    = Actual Output Matrix (S x UL);                Y_O     = Calculated Output Matrix (S x UL)
@@ -206,15 +211,17 @@ void backProp_H(float ** X, uint8_t ** Y, float** Y_O, float** Y_1, float** WO, 
 	// delta = Sum{(dC/dY_O)(dY_O/dZ_O)(dZ_O/dY_1)}(dY_1/dZ_1) ;  (ULx1) matix
 	float** delta = allocFloatMat(UL_m1, 1);
 	if (delta == NULL) {
-		printf("Memory Allocation Error for backprop_O");
+		printf("Memory Allocation Error for backprop_H");
 	}
 	for (int sam = 0; sam < S; sam++) {
 		for (int i = 0; i < UL_m2; i++) {
 			for (int j = 0; j < UL_m1; j++) {
 				delta[j][0] = 0.0;
-				for (int u = 0; u < UL; u++) {
-					delta[j][0] += (Y[sam][u] / Y_O[sam][u]) * (Y_O[sam][u] * (1 - Y_O[sam][u])) * WO[j + 1][u];
-				}
+				dim3 dimu(UL);
+				//for (int u = 0; u < UL; u++) {
+				//	delta[j][0] += (Y[sam][u] / Y_O[sam][u]) * (Y_O[sam][u] * (1 - Y_O[sam][u])) * WO[j + 1][u];
+				//}
+				kern8<<<dimu>>>(delta, Y, Y_O, WO, j, sam);
 				delta[j][0] = delta[j][0] * Y_1[sam][j] * (1 - Y_1[sam][j]);
 				if (i == 0) {
 					W1_updt[0][j] += delta[j][0];
@@ -223,13 +230,14 @@ void backProp_H(float ** X, uint8_t ** Y, float** Y_O, float** Y_1, float** WO, 
 			}
 		}
 	}
-
+	dim3 dimjk(UL_m2+1, UL_m1);
 	// Taking average of all the errors by dividing by the total number of Samples
-	for (int j = 0; j < UL_m2 + 1; j++) {
-		for (int k = 0; k < UL_m1; k++) {
-			W1_updt[j][k] = W1_updt[j][k] / S;
-		}
-	}
+	//for (int j = 0; j < UL_m2 + 1; j++) {
+	//	for (int k = 0; k < UL_m1; k++) {
+	//		W1_updt[j][k] = W1_updt[j][k] / S;
+	//	}
+	//}
+	kern7<<<dimjk>>>(W1_updt, S);
 }
 
 
@@ -239,7 +247,7 @@ void backProp_H(float ** X, uint8_t ** Y, float** Y_O, float** Y_1, float** WO, 
 // eta    = Learning rate
 void updateW(float** W, float** W_updt,int U1,int U2,int eta){
 	for (int i = 0; i < U1; i++) {
-		for (int j = 0; j < U1; j++) {
+		for (int j = 0; j < U2; j++) {
 			W[i][j] = W[i][j] - (eta * W_updt[i][j]);
 		}
 	}
