@@ -14,10 +14,10 @@
 
 
 #ifndef __COMMON_H__
-#include "Common.h"
+#include "commonGPU.h"
 #endif __COMMON_H__
 
-__global__ void kern1(double** X, double** Y, double** W, int sam, int u) {
+__global__ void kern1(float** X, float** Y, float** W, int sam, int u) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;
 	Y[sam][u] += (X[sam][idx] * W[idx + 1][u]);
 }
@@ -30,12 +30,13 @@ __global__ void kern1(double** X, double** Y, double** W, int sam, int u) {
 // inF   = Number of Input Features/units
 // Units = Number of Output Units
 
-void ForwardGPU(double** X, double** Y, double** W, int S, int inF, int Units) {
+void ForwardGPU(float** X, float** Y, float** W, int S, int inF, int Units) {
+	dim3 dimg(1);
 	dim3 blockDim(inF);
 	for (int sam = 0; sam < S; sam++) {
 		for (int u = 0; u < Units; u++) {
 			Y[sam][u] = 0.0;
-				kern1<<<blockDim>>>(X, Y, W, sam, u);
+				kern1<<<dimg, blockDim>>>(X, Y, W, sam, u);
 			Y[sam][u] += W[0][u];
 			//Y[sam][u] = sigmoid(Y[sam][u]);
 		}
@@ -43,50 +44,52 @@ void ForwardGPU(double** X, double** Y, double** W, int S, int inF, int Units) {
 
 }
 
-__global__ void kern2(double** X, double** Y) {
+__global__ void kern2(float** X, float** Y) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;
 	int idy = blockDim.y * blockIdx.y + threadIdx.y;
 	Y[idy][idx] = 1.0 / (1.0 + exp(-X[idy][idx]));
 }
 
-// SigmoidAct(double** X, double ** Y, int S, int Units) : Applies Sigmoid Activation to the SxUnits input matrix Y
+// SigmoidAct(float** X, float ** Y, int S, int Units) : Applies Sigmoid Activation to the SxUnits input matrix Y
 // X = Input matrix
 // Y = Output Matrix
 // S = number of Samples 
 // U = Number of Units
 
-void SigmoidAct(double** X, double** Y, int S, int Units) {
+void SigmoidAct(float** X, float** Y, int S, int Units) {
+	dim3 dimg(1);
 	dim3 dims(Units, S);
-	kern2<<<dims>>>(X, Y);
+	kern2<<<dimg, dims>>>(X, Y);
 }
 
 // expSum(Y, Units): calculates the sum of natural exponential of all the Units of Y
-double expSum(double* Y, int Units) {
-	double y_esum = 0.0;
+float expSum(float* Y, int Units) {
+	float y_esum = 0.0;
 	for (int u = 0; u < Units; u++) {
 		y_esum += exp(Y[u]);
 	}
 	return(y_esum);
 }
 
-__global__ void kern3(double** X, double** Y, int sam, double esum_y) {
+__global__ void kern3(float** X, float** Y, int sam, float esum_y) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;
 	Y[sam][idx] = exp(X[sam][idx]) / esum_y;
 }
 
-// NormExp(double**  X, double** Y,int S, int U): returns the normalized exponential of the matrix X
+// NormExp(float**  X, float** Y,int S, int U): returns the normalized exponential of the matrix X
 // X is a a matrix of size SxU
 // Y is the output Matrix of size SxU
 // U is the number of units in X
 // S = number of input samples
 
-void NormExp(double** X, double** Y, int S, int U) {
+void NormExp(float** X, float** Y, int S, int U) {
 	dim3 dim(U);
-	double esum_y;
+	dim3 dimg(1);
+	float esum_y;
 	for (int sam = 0; sam < S; sam++) {
 		esum_y = expSum(X[sam], U);
 		//for (int u = 0; u < U; u++) {
-			kern3<<<dim>>>(X, Y, sam, esum_y);
+			kern3<<<dimg, dim>>>(X, Y, sam, esum_y);
 		//}
 	}
 }
@@ -98,12 +101,12 @@ void NormExp(double** X, double** Y, int S, int U) {
 // S   = Number of Samples
 // U   = Number of Units
 
-void CatCrEnt(uint8_t** Y, double** Y_O, double** C, int S, int Units) {
+void CatCrEnt(uint8_t** Y, float** Y_O, float** C, int S, int Units) {
 	
 	for (int sam = 0; sam < S; sam++) {
 		C[sam][0] = 0.0;
 		for (int u = 0; u < Units; u++) {
-			C[sam][0] -= (double) Y[sam][u] * log(Y_O[sam][u]);
+			C[sam][0] -= (float) Y[sam][u] * log(Y_O[sam][u]);
 		}
 	}
 
@@ -128,7 +131,7 @@ __global__ void kern6(float** delta, float** WO_updt) {
 __global__ void kern7(float** WO_updt, int S) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;
 	int idy = blockDim.y * blockIdx.y + threadIdx.y;
-	WO_updt[idy][idx] /= S;
+	WO_updt[idy][idx] /= (float) S;
 }
 
 //void backProp_O(uint8_t** Y, float** Y_O, float** Z_O, float** Y_1, float** WO_updt, int S, int UL, int UL_m1)
@@ -140,9 +143,10 @@ __global__ void kern7(float** WO_updt, int S) {
 // WO_Updt = Matrix for storing derivatives w.r.t each weight (UL_m1+1 x UL)
 // S = Number of Samples, UL = Number of units in output layer, UL_m1 = Number of units in Input Layer
 
-void backProp_O(uint8_t** Y, double** Y_O, double** Z_O, double** Y_1, double** WO_updt, int S, int UL, int UL_m1) {
+void backProp_O(uint8_t** Y, float** Y_O, float** Z_O, float** Y_1, float** WO_updt, int S, int UL, int UL_m1) {
 	// delta = (dC/dY_O)(dY_O/dZ_O) ;  (ULx1) matix
-	double** delta = allocFloatMat(UL, 1);
+	dim3 dimg(1);
+	float** delta = allocFloatMat(UL, 1);
 	if (delta == NULL) {
 		printf("Memory Allocation Error for backprop_O");
 	}
@@ -150,7 +154,7 @@ void backProp_O(uint8_t** Y, double** Y_O, double** Z_O, double** Y_1, double** 
 	// Accumulating Errors/weight_updates for each sample
 	dim3 dimjk(UL_m1, UL);
 	for(int sam = 0; sam < S; sam++){
-		double z_sum = 0.0;
+		float z_sum = 0.0;
 		z_sum = expSum(Z_O[sam], UL);
 		dim3 dimi(UL);
 		//for (int i = 0; i < UL; i++) {
@@ -158,8 +162,8 @@ void backProp_O(uint8_t** Y, double** Y_O, double** Z_O, double** Y_1, double** 
 			// dY_O/dZ_O = (z_sum*Z_O - Z_O^2)/z_sum      for Normalized Exponential
 			// delta = (dC/dY_O)(dY_O/dZ_O)
 			//delta[i][0] = (Y[sam][i] / Y_O[sam][i]) * (z_sum * Z_O[sam][i] - pow(Z_O[sam][i], 2)) / z_sum;
-			kern4<<<dimi>>>(delta, Y, Y_O, Z_O, z_sum, sam);
-			if (sam == 0 & i == 1) {
+			kern4<<<dimg, dimi>>>(delta, Y, Y_O, Z_O, z_sum, sam);
+			/*if (sam == 0 & i == 1) {
 				printf("\n Delta Values");
 				printf("\n Delta[i] = %f", delta[i][0]);
 				printf("\n Y[0][i] = %d", Y[0][i]);
@@ -167,7 +171,7 @@ void backProp_O(uint8_t** Y, double** Y_O, double** Z_O, double** Y_1, double** 
 				printf("\n z_sum = %f", z_sum);
 				printf("\n Z_O[0][i] = %f", Z_O[0][i]);
 				printf("\n pow(Z_O[0][i], 2)) = %f", pow(Z_O[0][i], 2));
-			}
+			}*/
 		//}
 		// weight Updates
 		// WO_updt = dC/dW = delta*Y_1  for each weight
@@ -177,14 +181,14 @@ void backProp_O(uint8_t** Y, double** Y_O, double** Z_O, double** Y_1, double** 
 				//WO_updt[j+1][k] += delta[k][0] * Y_1[sam][j];
 			//}
 		//}
-		kern5<<<dimjk>>>(delta, WO_updt, Y_1, sam);
+		kern5<<<dimg, dimjk>>>(delta, WO_updt, Y_1, sam);
 		// Bias Updates
 		// Bias_update = dC/dB = delta
 
 		//for (int k = 0; k < UL; k++) {
 		//	WO_updt[0][k] += delta[k][0];
 		//}
-		kern6<<<dimi>>>(delta, WO_updt);
+		kern6<<<dimg, dimi>>>(delta, WO_updt);
 	}
 
 	// Taking average of all the errors by dividing by the total number of Samples
@@ -193,13 +197,19 @@ void backProp_O(uint8_t** Y, double** Y_O, double** Z_O, double** Y_1, double** 
 	//		WO_updt[j][k] = WO_updt[j][k]/S;
 	//	}
 	//}
-	kern7<<<dimjk>>>(WO_updt, S);
+	kern7<<<dimg, dimjk>>>(WO_updt, S);
 
 }
 
-__global__ void kern8(float** delta, u_int8_t** Y, float** Y_O, float** WO, int j, int sam) {
+__global__ void kern8(float** X, float** delta, u_int8_t** Y, float** Y_O, float** WO, float** W1_updt, float** Y_1, int UL, int k, int sam) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;
-	delta[j][0] += (Y[sam][idx] / Y_O[sam][idx]) * (Y_O[sam][idx] * (1 - Y_O[sam][idx])) * WO[j + 1][idx];
+	delta[idx][0] = 0.0;
+	for (int i = 0; i < UL; i++)
+		delta[idx][0] += (Y[sam][i] / Y_O[sam][i]) * (Y_O[sam][i] * (1 - Y_O[sam][i])) * WO[idx + 1][i];
+	delta[idx][0] *= Y_1[sam][idx] * (1 - Y_1[sam][idx]);
+	if (k == 0)
+		W1_updt[0][idx] += delta[idx][0];
+	W1_updt[k+1][idx] += delta[idx][0] * X[sam][k];
 }
 
 // Void backProp_H()
@@ -210,24 +220,27 @@ __global__ void kern8(float** delta, u_int8_t** Y, float** Y_O, float** WO, int 
 void backProp_H(float ** X, uint8_t ** Y, float** Y_O, float** Y_1, float** WO, float** W1_updt, int S, int UL_m2, int UL_m1, int UL) {
 	// delta = Sum{(dC/dY_O)(dY_O/dZ_O)(dZ_O/dY_1)}(dY_1/dZ_1) ;  (ULx1) matix
 	float** delta = allocFloatMat(UL_m1, 1);
+	dim3 dimg(1);
 	if (delta == NULL) {
 		printf("Memory Allocation Error for backprop_H");
 	}
 	for (int sam = 0; sam < S; sam++) {
 		for (int i = 0; i < UL_m2; i++) {
-			for (int j = 0; j < UL_m1; j++) {
-				delta[j][0] = 0.0;
-				dim3 dimu(UL);
+			dim3 dimu(UL_m1);
+			kern8<<<dimg, dimu>>>(X, delta, Y, Y_O, WO, W1_updt, Y_1, UL, i, sam);
+			//for (int j = 0; j < UL_m1; j++) {
+				//delta[j][0] = 0.0;
+
 				//for (int u = 0; u < UL; u++) {
 				//	delta[j][0] += (Y[sam][u] / Y_O[sam][u]) * (Y_O[sam][u] * (1 - Y_O[sam][u])) * WO[j + 1][u];
 				//}
-				kern8<<<dimu>>>(delta, Y, Y_O, WO, j, sam);
-				delta[j][0] = delta[j][0] * Y_1[sam][j] * (1 - Y_1[sam][j]);
-				if (i == 0) {
-					W1_updt[0][j] += delta[j][0];
-				}
-				W1_updt[i+1][j] += delta[j][0] * X[sam][i];
-			}
+				//kern8<<<dimg, dimu>>>(delta, Y, Y_O, WO, j, sam);
+				//delta[j][0] = delta[j][0] * Y_1[sam][j] * (1 - Y_1[sam][j]);
+				//if (i == 0) {
+				//	W1_updt[0][j] += delta[j][0];
+				//}
+				//W1_updt[i+1][j] += delta[j][0] * X[sam][i];
+			//}
 		}
 	}
 	dim3 dimjk(UL_m2+1, UL_m1);
@@ -237,7 +250,7 @@ void backProp_H(float ** X, uint8_t ** Y, float** Y_O, float** Y_1, float** WO, 
 	//		W1_updt[j][k] = W1_updt[j][k] / S;
 	//	}
 	//}
-	kern7<<<dimjk>>>(W1_updt, S);
+	kern7<<<dimg, dimjk>>>(W1_updt, S);
 }
 
 
