@@ -197,7 +197,7 @@ void backProp_H(float ** X, uint8_t ** Y, float** Y_O, float** Y_1, float** WO, 
 // eta    = Learning rate
 void updateW(float** W, float** W_updt,int U1,int U2,int eta){
 	for (int i = 0; i < U1; i++) {
-		for (int j = 0; j < U1; j++) {
+		for (int j = 0; j < U2; j++) {
 			W[i][j] = W[i][j] - (eta * W_updt[i][j]);
 		}
 	}
