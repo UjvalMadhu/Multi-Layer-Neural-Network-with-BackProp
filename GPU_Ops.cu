@@ -66,6 +66,11 @@ void SigmoidAct(float** X, float** Y, int S, int Units) {
 float expSum(float* Y, int Units) {
 	float y_esum = 0.0;
 	for (int u = 0; u < Units; u++) {
+		if (isnan(exp(Y[u]))) {
+		//	int i = 1;
+			printf("nan in y %f %d\n", Y[u], u);
+			exit(1);
+		}
 		y_esum += exp(Y[u]);
 	}
 	return(y_esum);
@@ -73,9 +78,10 @@ float expSum(float* Y, int Units) {
 
 __global__ void kern3(float** X, float** Y, int sam, float esum_y) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;
-	if (isnan(exp(X[sam][idx]))) {
-		int i = 1;
-	}
+	//if (isnan(exp(X[sam][idx]))) {
+		//int i = 1;
+		//printf("nan in X %f %d %d\n",X[sam][idx], sam, idx);
+	//}
 	Y[sam][idx] = exp(X[sam][idx]) / esum_y;
 }
 
@@ -91,9 +97,10 @@ void NormExp(float** X, float** Y, int S, int U) {
 	float esum_y;
 	for (int sam = 0; sam < S; sam++) {
 		esum_y = expSum(X[sam], U);
-		if (isnan(esum_y)) {
-			int i = 1;
-		}
+		//if (isnan(esum_y)) {
+		//	int i = 1;
+			//printf("nan in esum %d\n", sam);
+		//}
 
 		//for (int u = 0; u < U; u++) {
 			kern3<<<dimg, dim>>>(X, Y, sam, esum_y);

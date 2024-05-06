@@ -21,12 +21,12 @@
 #define CHECK_DERR(crud) derr = crud; if (derr != 0) {fprintf(stderr, "Line %d: %s\n", __LINE__, cudaGetErrorString(derr)); exit(EXIT_FAILURE);}
 cudaError_t derr;
 // Constant Declaration
-const int F  = 784;     //Number of Input Features
-const int S  = 60000;   //Number of Samples
-const int U1 = 128;     //Number of Units of Layer 1
+const int F  = 500;     //Number of Input Features
+const int S  = 60000/2;   //Number of Samples
+const int U1 = 256;     //Number of Units of Layer 1
 const int U2 = 256;     //Number of Units of Layer 2
 const int UL = 10;
-const int E = 2; //Epochs
+const int E = 30; //Epochs
 const float eta    = 0.001;   //Learning Rate
 
 //========== M A I N   F U N C T I O N================
@@ -68,7 +68,10 @@ int main(int argc, char* argv[]) {
 			/*if (i == 0) {
 				printf("\n x[0][%u ] = %u \n", j, tmp);
 			}*/
-			x[i][j] = (float)(tmp/255.0);    // Normalizaing x 
+			x[i][j] = (float)(tmp/255.0);    // Normalizaing x
+			//if (isnan(x[i][j])) {
+			//	printf("nan x %d %d %hhu\n", i, j, tmp);
+			//}
 		}
 	}
 	/* //Print Input and Output Values
@@ -181,6 +184,7 @@ int main(int argc, char* argv[]) {
 		CHECK_DERR(cudaMalloc((void **) &(yd[i]), 10 * sizeof(float)))
 		CHECK_DERR(cudaMemcpy(yd[i], y[i], 10 * sizeof(float), cudaMemcpyHostToDevice))
 	}
+	clock_t timenow = clock();
 	for (int e = 0; e < E; e++) {
 		ForwardGPU(&(xbd[(S/E)*e]), z_1, w1, S/E, F, U1);       // Forward Pass with Sigmoid activation
 
@@ -223,6 +227,9 @@ int main(int argc, char* argv[]) {
 
 		updateW(wO, wO_updt, U1, UL, eta);
 	}
+	timenow = clock() - timenow;
+	double gpu_time = (1000.0 * timenow) / (double) CLOCKS_PER_SEC;
+	printf("GPU EPOCHS took %lf ms\n", gpu_time);
 	printf("got\n");
 	for (int i = 0; i < 100; i++) {
 		for (int j = 0; j < UL; j++){
