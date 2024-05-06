@@ -22,8 +22,8 @@ const int Features = 784;		  // Number of Input Features
 const int Samples  = 60000;		  // Number of Samples
 const int U1       = 100;		  // Number of Units of Layer 1
 const int UL       = 10;		  // Number of Units in Output Layer
-const int EPOCHS   = 3;          // Number of Epochs
-const int ITERS    = 20;		  // Number of Iterations
+const int EPOCHS   = 1;          // Number of Epochs
+const int ITERS    = 10;		  // Number of Iterations
 const float eta    = 0.001;       // Learning Rate
 
 //========== M A I N   F U N C T I O N================
@@ -112,8 +112,8 @@ int main(int argc, char* argv[]) {
 	//	printf("\n", i);
 	//}
 
-	const int F = 784;
-	const int S = 20000;
+	const int F = 100;
+	const int S = 2000;
 	clock_t start, end;
 	float tCPU;
 	float** x = allocFloatMat(S, F);
@@ -212,7 +212,7 @@ int main(int argc, char* argv[]) {
 	start = clock();
 	for (int ep = 0; ep < EPOCHS; ep++) {
 
-		sam_index += S;
+		//sam_index += S;
 		//feat_index += 78;
 
 		
@@ -245,46 +245,15 @@ int main(int argc, char* argv[]) {
 			// 
 			//=============================== Layer One ===================================//
 
-			printf("\n****** Layer 1 Epoch: %d Iteration %d/ %d ******\n", ep, itr,ITERS);
+			//printf("\n****** Layer 1 Epoch: %d Iteration %d/ %d ******\n", ep, itr,ITERS);
 
-			for (int sam = 0; sam < 3; sam++) {
-				printf("\nx[%d] = ", sam);
-				for (int i = 0; i < F; i++) {
-					printf("%f \t", x[sam][i]);
-				}
-			}
-			printf("\n\n");
-
-			for (int sam = 0; sam < F+1; sam++) {
-				printf("\n w1[%d] = ", sam);
-				for (int i = 0; i < 3; i++) {
-					printf("%f \t", w1[sam][i]);
-				}
-			}
-
-			printf("\n\n");
 
 			ForwardCPU(x, z_1, w1, S, F, U1);       // Forward Pass with Sigmoid activation
 			SigmoidAct(z_1, y_1, S, U1);
 
-			for (int sam = 0; sam < 2; sam++) {
-				printf("\nZ_1[%d] = ", sam);
-				for (int i = 0; i < U1; i++) {
-					printf("%f \t", z_1[sam][i]);
-				}
-			}
 
-			printf("\n\n");
-
-			for (int sam = 0; sam < 2; sam++) {
-				printf("\nY_1[%d] = ", sam);
-				for (int i = 0; i < U1; i++) {
-					printf("%f \t", y_1[sam][i]);
-				}
-			}
-
-			printf("\n\n");
-			printf("\n****** Output layer Epoch: %d Iteration %d/ %d ******\n", ep, itr , ITERS);
+			/*printf("\n\n");
+			printf("\n****** Output layer Epoch: %d Iteration %d/ %d ******\n", ep, itr , ITERS);*/
 			//============================ Output Layer =====================================//
 
 			// The output layer does not use the sigmoid activation function but
@@ -313,7 +282,7 @@ int main(int argc, char* argv[]) {
 			//Printing Cost value
 
 
-			if (itr % 1 == 0) {
+			if (itr % 10 == 0) {
 				printf("\n\n****** Epoch %d / %d, Iteration = %d/%d Cost = %f *******\n\n", ep, EPOCHS, itr,ITERS, cost);
 			}
 
@@ -323,7 +292,6 @@ int main(int argc, char* argv[]) {
 			clearFloatMat(wO_updt, U1+1, UL);
 			clearFloatMat(delta1, S, UL);
 			clearFloatMat(delta2, S, U1);
-
 
 
 			// Since we are using BGD optimization we will be accumulating all the errors from all the 
@@ -356,7 +324,7 @@ int main(int argc, char* argv[]) {
 
 			if (ep%10 == 0 || ep == EPOCHS-1) {
 				printf("\n Predicted Output at Epoch = %d\n", ep);
-				for (int i = 0; i < S; i++) {
+				for (int i = 0; i < 10; i++) {
 					for (int j = 0; j < UL; j++){
 						printf("  %f  ", y_O[i][j]);
 					}
@@ -364,7 +332,7 @@ int main(int argc, char* argv[]) {
 				}
 
 				printf("\n Target Output \n");
-				for (int i = 0; i < S; i++) {
+				for (int i = 0; i < 10; i++) {
 					for (int j = 0; j < UL; j++) {
 						printf("  %f  ", y[i][j]);
 					}
@@ -759,5 +727,38 @@ float** WeightGen(int F, int U) {
 			//	printf("\n w1[%d] = ", sam);
 			//	for (int i = 0; i < U1; i++) {
 			//		printf("%f \t", w1[sam][i]);
+			//	}
+			//}
+
+			//for (int sam = 0; sam < 3; sam++) {
+			//	printf("\nx[%d] = ", sam);
+			//	for (int i = 0; i < F; i++) {
+			//		printf("%f \t", x[sam][i]);
+			//	}
+			//}
+			//printf("\n\n");
+
+			//for (int sam = 0; sam < F+1; sam++) {
+			//	printf("\n w1[%d] = ", sam);
+			//	for (int i = 0; i < 3; i++) {
+			//		printf("%f \t", w1[sam][i]);
+			//	}
+			//}
+
+			//printf("\n\n");
+
+			//for (int sam = 0; sam < 2; sam++) {
+			//	printf("\nZ_1[%d] = ", sam);
+			//	for (int i = 0; i < U1; i++) {
+			//		printf("%f \t", z_1[sam][i]);
+			//	}
+			//}
+
+			//printf("\n\n");
+
+			//for (int sam = 0; sam < 2; sam++) {
+			//	printf("\nY_1[%d] = ", sam);
+			//	for (int i = 0; i < U1; i++) {
+			//		printf("%f \t", y_1[sam][i]);
 			//	}
 			//}
