@@ -88,22 +88,22 @@ void NormExp(float** X, float** Y, int S, int U);
 // C   = Cost Matrix (Sx1)
 // S   = Number of Samples
 // U   = Number of Units
-void CatCrEnt(uint8_t** Y, float** Y_O, float** C, int S, int Units);
+void CatCrEnt(float** Y, float** Y_O, float** C, int S, int Units);
 
 
-//void backProp_O(uint8_t** Y, float** Y_O, float** Z_O, float** Y_1, float** WO_updt, int S, int UL, int UL_m1)
+//void backProp_O(float** Y, float** Y_O, float** Z_O, float** Y_1, float** WO_updt, int S, int UL, int UL_m1)
 // Calculates the derivative of the cost w.r.t the weights for the Output layer, i.e the weight update value averaged across the given number of samples
 // Y       = Actual Output Matrix (S x UL);             Y_O     = Calculated Output Matrix (S x UL)
 // Z_O     = Output Matrix before activation (S x UL) ; Y_1     = Input to output layer (S x UL_m1)
 // WO_Updt = Matrix for storing derivatives w.r.t each weight (UL_m1+1 x UL)
 // S = Number of Samples, UL = Number of units in output layer, UL_m1 = Number of units in Input Layer
-void backProp_O(uint8_t** Y, float** Y_O, float** Z_O, float** Y_1, float** WO_updt, int S, int UL, int UL_m1);
+void backProp_O(float** Y, float** Y_O, float** Z_O, float** Y_1, float** WO_updt, int S, int UL, int UL_m1);
 
 // Void backProp_H()
 // Calculates the derivative of the cost w.r.t the weights for the Hidden layer
 // Y    = Actual Output Matrix (S x UL);             Y_O     = Calculated Output Matrix (S x UL)
 // Z_O     = Output Matrix before activation (S x UL) ; Y_1     = Input to output layer (S x UL_m1)      
-void backProp_H(float** X, uint8_t** Y, float** Y_O, float** Y_1, float** WO, float** W1_updt, int S, int UL_m2, int UL_m1, int UL);
+void backProp_H(float** X, float** Y, float** Y_O, float** Y_1, float** WO, float** W1_updt, int S, int UL_m2, int UL_m1, int UL);
 
 
 // updateW(float ** W, float ** W_updt, int U1, int U2, int eta)

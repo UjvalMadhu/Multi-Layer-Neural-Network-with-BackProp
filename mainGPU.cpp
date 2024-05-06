@@ -18,20 +18,25 @@
 #include "commonGPU.h"
 #endif
 
+#define CHECK_DERR(crud) derr = crud; if (derr != 0) {fprintf(stderr, "Line %d: %s\n", __LINE__, cudaGetErrorString(derr)); exit(EXIT_FAILURE);}
+cudaError_t derr;
 // Constant Declaration
 const int F  = 784;     //Number of Input Features
 const int S  = 60000;   //Number of Samples
 const int U1 = 128;     //Number of Units of Layer 1
-const int U2 = 256;     //Number of Units of Layer 2 
+const int U2 = 256;     //Number of Units of Layer 2
+const int UL = 10;
+const int E = 1; //Epochs
+const float eta    = 0.005;   //Learning Rate
 
 //========== M A I N   F U N C T I O N================
 
 int main(int argc, char* argv[]) {
-	cudaSetDeviceFlags(cudaDeviceMapHost);
-	// ======== Feature Extraction ============ //
 
+	CHECK_DERR(cudaSetDeviceFlags(cudaDeviceMapHost))
+	// ======== Feature Extraction ============ //
 	// Training Dataset
-	FILE* train_set = fopen("mnist_train.csv", "r");
+	FILE* train_set = fopen("../mnist_train.csv", "r");
 	if (train_set== NULL) {
 		fprintf(stderr, "Missing training data\n");
 		exit(1);
@@ -39,7 +44,7 @@ int main(int argc, char* argv[]) {
 
 
 	// y: Output Vector Memory Allocation
-	uint8_t* y_num = (uint8_t*)malloc(S * sizeof(uint8_t)); // y = 60000x1 Matrix
+	float* y_num = (float*)malloc(S * sizeof(float)); // y = 60000x1 Matrix
 	if (y_num == NULL) {
 		fprintf(stderr, "Missing training data\n");
 		exit(1);
@@ -56,7 +61,8 @@ int main(int argc, char* argv[]) {
 	// Populating the input and Output Matrices
 	uint8_t tmp ;
 	for (int i = 0; i < S; i++) {
-		fscanf(train_set, "%hhu", &(y_num[i]));   
+		fscanf(train_set, "%hhu", &tmp);
+		y_num[i] = (float) tmp;
 		for (int j = 0; j < F; j++) {
 			fscanf(train_set, ",%hhu", &tmp);
 			/*if (i == 0) {
@@ -76,18 +82,12 @@ int main(int argc, char* argv[]) {
 	
 	//======= CATEGORICAL ENCODING OF OUTPUT =======//
 
-	uint8_t** y = (uint8_t **)malloc(S * sizeof(uint8_t *));
+	float** y = allocFloatMat(S, 10, true);
 	if (y == NULL) {
 		printf("Memory Allocation Error for Y");
 		exit(1);
 	}
-	for (int ii = 0; ii < S; ii++) {
-		y[ii] = (uint8_t*)malloc(10 * sizeof(uint8_t));
-		if (y[ii] == NULL) {
-			printf("Memory Allocation Error for Y[%u]",ii);
-			exit(1);
-		}
-	}
+
 	for (int i = 0; i < S; i++) {
 		for (int j = 0; j < 10; j++) {
 			y[i][j] = (j == y_num[i]) ? 1 : 0;
@@ -101,7 +101,6 @@ int main(int argc, char* argv[]) {
 		}
 		printf("\n", i);
 	}*/
-
 
 	//======================= WEIGHT MATRICES ==========================//
 
@@ -133,6 +132,18 @@ int main(int argc, char* argv[]) {
 		exit(1);
 	}
 
+	float** z_O = allocFloatMat(S, 10);
+	if (z_O == NULL) {
+		printf("\n Output Layer Z Units Matrix Allocation Error \n");
+		exit(1);
+	}
+	// y_O: Output layer units, 10 in number
+	float** y_O = allocFloatMat(S, 10);
+	if (y_O == NULL) {
+		printf("\n Output Layer Y Units Matrix Allocation Error \n");
+		exit(1);
+	}
+
 	// In this Implementation we will be using Batch Gradient Descent Optimization
 	// 
 	// 
@@ -151,90 +162,62 @@ int main(int argc, char* argv[]) {
 		printf("\n Layer 1 Y Units Matrix Allocation Error \n");
 		exit(1);
 	}
-	float** xd = allocFloatMat(S, F);
-	for (int i = 0; i < S; i++)
-		cudaMemcpy(xd[i], x[i], F * sizeof(float), cudaMemcpyHostToDevice);
-	ForwardGPU(xd, z_1, w1, S, F, U1);       // Forward Pass with Sigmoid activation
-
-	SigmoidAct(z_1, y_1, S, U1);
-
-	//============================ Output Layer =====================================//
-
-	// z_O: Output layer units, 10 in number
-	float** z_O = allocFloatMat(S, 10);
-	if (z_O == NULL) {
-		printf("\n Output Layer Z Units Matrix Allocation Error \n");
-		exit(1);
-	}
-	// y_O: Output layer units, 10 in number
-	float** y_O = allocFloatMat(S, 10);
-	if (y_O == NULL) {
-		printf("\n Output Layer Y Units Matrix Allocation Error \n");
-		exit(1);
-	}
-
-	// The output layer does not use the sigmoid activation function but
-	// uses the Normalized Exponential Activation so that the total sum of
-	// all Output values of the network for a given sample = 1 and individual
-	// outtput units will have different probabilites
-	// Our goal would be to have the correct unit have the highest probability of 1.
-
-	ForwardGPU(y_1, z_O, wO, S, U1, 10);			// Forward Pass
-	NormExp(z_O, y_O, S, 10);                       // Normalized Exponential Activation
-
-	//============================== Backpropagation =================================//
-	// In this implementation, we use categorical cross entropy cost
-	// The categorical cross entropy cost  = sum over all classes {y*ln(y_O)}
-	
 	float** C = allocFloatMat(S,1, true);
 	if (C == NULL) {
 		printf("Memory Allocation Error for Cost C");
 		exit(1);
 	}
-	CatCrEnt(y, y_O, C, S, 10);						// Categorical Cross Entropy Cost for all samples
-
-	// Since we are using BGD optimization we will be accumulating all the errors from all the 
-	// training samples and averaging them in the w_updt matices in the backProp step.
-
-	uint8_t** yd;
-	cudaMalloc((void***) &yd, S * sizeof(uint8_t*));
-	for (int i = 0; i < S; i++) {
-		cudaMalloc((void **) &(yd[i]), 10 * sizeof(uint8_t));
-		cudaMemcpy(yd[i], y[i], 10 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-	}
-	// 1. Backpropagation at the Output Layer
-	backProp_O(yd, y_O, z_O, y_1, wO_updt, S, 10, U1);
-
-	// 2. Backpropagation at the first Layer
-	backProp_H(xd, yd, y_O, y_1, wO, w1_updt, S, U2, U1, 10);
+	float** xbd = allocFloatMat(S, F);
 	for (int i = 0; i < S; i++)
-		cudaFree(yd[i]);
-	cudaFree(yd);
-	freeFloatMat(xd, S);
-
-
-	/*printf("Output Matrix");
-	for (int sam = 0; sam < S; sam++){
-		for (int u = 0; u < U; u++) {
-			y_1[sam][u] = 0.0;
-			for (int f = 0; f < F; f++) {
-				y_1[sam][u] = y_1[sam][u] + x[sam][f] * w[f + 1][u];
-			}
-			y_1[sam][u] += w[0][u];
-			y_1[sam][u] = sigmoid(y_1[sam][u]);
-		}
-	}*/
-	/*float y_temp = 0.0;
-	for (int f = 0; f < F; f++) {
-		y_temp += x[0][f] * w[0][f+1];
+	CHECK_DERR(cudaMemcpy(xbd[i], x[i], F * sizeof(float), cudaMemcpyHostToDevice))
+	float **yd;
+	CHECK_DERR(cudaMalloc((void ***) &yd, S * sizeof(float*)))
+	for (int i = 0; i < S; i++) {
+		CHECK_DERR(cudaMalloc((void **) &(yd[i]), 10 * sizeof(float)))
+		CHECK_DERR(cudaMemcpy(yd[i], y[i], 10 * sizeof(float), cudaMemcpyHostToDevice))
 	}
-	y_temp += w[0][0];
-	printf("y_temp = %f", y_temp);
-	printf("sizes of x = %d, y_1 = %d, w = %d, y = %d",
-	sizeof(x)/sizeof(x[0]), sizeof(y_1), sizeof(w), sizeof(y));*/
+	for (int e = 0; e < E; e++) {
+		ForwardGPU(xbd, z_1, w1, S, F, U1);       // Forward Pass with Sigmoid activation
 
-	//printf("\nsizes of x = %d x %d\n",
-		//sizeof(x) , sizeof(x[0]));
+		SigmoidAct(z_1, y_1, S, U1);
+
+		//============================ Output Layer =====================================//
+
+		// z_O: Output layer units, 10 in number
+
+
+		// The output layer does not use the sigmoid activation function but
+		// uses the Normalized Exponential Activation so that the total sum of
+		// all Output values of the network for a given sample = 1 and individual
+		// outtput units will have different probabilites
+		// Our goal would be to have the correct unit have the highest probability of 1.
+
+		ForwardGPU(y_1, z_O, wO, S, U1, UL);            // Forward Pass
+		NormExp(z_O, y_O, S, UL);                       // Normalized Exponential Activation
+
+		//============================== Backpropagation =================================//
+		// In this implementation, we use categorical cross entropy cost
+		// The categorical cross entropy cost  = sum over all classes {y*ln(y_O)}
+
+
+		CatCrEnt(y, y_O, C, S, 10);                        // Categorical Cross Entropy Cost for all samples
+
+		// Since we are using BGD optimization we will be accumulating all the errors from all the
+		// training samples and averaging them in the w_updt matices in the backProp step.
+
+
+		// 1. Backpropagation at the Output Layer
+		backProp_O(yd, y_O, z_O, y_1, wO_updt, S, 10, U1);
+
+		// 2. Backpropagation at the first Layer
+		backProp_H(xbd, yd, y_O, y_1, wO, w1_updt, S, U2, U1, 10);
+
+		updateW(w1, w1_updt, F, U1, eta);
+
+		// 2. w2: U1 x 10
+
+		updateW(wO, wO_updt, U1, UL, eta);
+	}
 
 	printf("Y_f1 [0][0] = %f\n", y_1[0][0]);
 	printf("Y_f1 [0][1] = %f\n", y_1[0][1]);
@@ -263,7 +246,7 @@ int main(int argc, char* argv[]) {
 	freeFloatMat(yd, S);
 	freeFloatMat(xbd, S);
 	freeFloatMat(x, S, true);
-	free(y);
+	freeFloatMat(y, S, true);
 	free(y_num);
 	freeFloatMat(C, S, true);
 	freeFloatMat(w1, F+1);
@@ -286,22 +269,19 @@ int main(int argc, char* argv[]) {
 // Returns a Double Pointer Matrix
 
 float** allocFloatMat(int i, int j, bool reg) {
-	float** mat;// = (float**)malloc(i * sizeof(float*));
+	float** mat;
 	if (reg)
 		mat = (float**)malloc(i * sizeof(float*));
 	else
-		cudaMalloc((void ***) &mat, i * sizeof(float*));
-	//if (reg)
-		//cudaHostRegister(mat, i * sizeof(float*), cudaHostRegisterMapped);
+		CHECK_DERR(cudaMalloc((void ***) &mat, i * sizeof(float*)))
 	if (mat == NULL) {
 		return mat;
 	}
 	for (int ii = 0; ii < i; ii++) {
-		//mat[ii] = (float*)malloc(j * sizeof(float));
 		if (reg)
 			mat[ii] = (float*)malloc(j * sizeof(float));
 		else
-			cudaMalloc((void **) &(mat[ii]), j * sizeof(float));
+			CHECK_DERR(cudaMalloc((void **) &(mat[ii]), j * sizeof(float)))
 		if (mat[ii] == NULL) {
 			return (float**)mat[ii];
 		}
@@ -318,12 +298,12 @@ void freeFloatMat(float** mat, int i, bool reg) {
 		if (reg)
 			free(mat[ii]);
 		else
-			cudaFree(mat[ii]);
+			CHECK_DERR(cudaFree(mat[ii]))
 	}
 	if (reg)
 		free(mat);
 	else
-		cudaFree(mat);
+		CHECK_DERR(cudaFree(mat))
 }
 
 // mac: Returns the  Multiply Accumulate Result of Two Vectors, for input and weight MAC
