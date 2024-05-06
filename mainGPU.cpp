@@ -260,8 +260,11 @@ int main(int argc, char* argv[]) {
 		sum += y_O[0][i];
 	}
 	printf("\nSum of elements of y_O = %f\n", sum);
+	freeFloatMat(yd, S);
+	freeFloatMat(xbd, S);
 	freeFloatMat(x, S, true);
 	free(y);
+	free(y_num);
 	freeFloatMat(C, S, true);
 	freeFloatMat(w1, F);
 	freeFloatMat(wO, U1);

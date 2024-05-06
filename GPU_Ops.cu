@@ -198,7 +198,7 @@ void backProp_O(uint8_t** Y, float** Y_O, float** Z_O, float** Y_1, float** WO_u
 	//	}
 	//}
 	kern7<<<dimg, dimjk>>>(WO_updt, S);
-
+	freeFloatMat(delta, UL);
 }
 
 __global__ void kern8(float** X, float** delta, u_int8_t** Y, float** Y_O, float** WO, float** W1_updt, float** Y_1, int UL, int k, int sam) {
@@ -251,6 +251,7 @@ void backProp_H(float ** X, uint8_t ** Y, float** Y_O, float** Y_1, float** WO, 
 	//	}
 	//}
 	kern7<<<dimg, dimjk>>>(W1_updt, S);
+	freeFloatMat(delta, UL_m1);
 }
 
 
