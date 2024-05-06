@@ -26,8 +26,8 @@ const int S  = 60000;   //Number of Samples
 const int U1 = 128;     //Number of Units of Layer 1
 const int U2 = 256;     //Number of Units of Layer 2
 const int UL = 10;
-const int E = 1; //Epochs
-const float eta    = 0.005;   //Learning Rate
+const int E = 2; //Epochs
+const float eta    = 0.001;   //Learning Rate
 
 //========== M A I N   F U N C T I O N================
 
@@ -132,15 +132,20 @@ int main(int argc, char* argv[]) {
 		exit(1);
 	}
 
-	float** z_O = allocFloatMat(S, 10);
+	float** z_O = allocFloatMat(S/E, 10);
 	if (z_O == NULL) {
 		printf("\n Output Layer Z Units Matrix Allocation Error \n");
 		exit(1);
 	}
 	// y_O: Output layer units, 10 in number
-	float** y_O = allocFloatMat(S, 10);
+	float** y_O = allocFloatMat(S/E, 10);
 	if (y_O == NULL) {
 		printf("\n Output Layer Y Units Matrix Allocation Error \n");
+		exit(1);
+	}
+	float** delta1 = allocFloatMat(S/E, UL);
+	if (delta1 == NULL) {
+		printf("Memory Allocation Error for delta1");
 		exit(1);
 	}
 
@@ -150,19 +155,19 @@ int main(int argc, char* argv[]) {
 	//=============================== Layer One ===================================//
 
 	// z_1 layer one units
-	float** z_1 = allocFloatMat(S, U1);
+	float** z_1 = allocFloatMat(S/E, U1);
 	if (z_1 == NULL) {
 		printf("\n Layer 1 Z Units Matrix Allocation Error \n");
 		exit(1);
 	}
 
 	// y_1 layer one units
-	float** y_1 = allocFloatMat(S, U1);
+	float** y_1 = allocFloatMat(S/E, U1);
 	if (y_1 == NULL) {
 		printf("\n Layer 1 Y Units Matrix Allocation Error \n");
 		exit(1);
 	}
-	float** C = allocFloatMat(S,1, true);
+	float** C = allocFloatMat(S/E,1, true);
 	if (C == NULL) {
 		printf("Memory Allocation Error for Cost C");
 		exit(1);
@@ -177,9 +182,9 @@ int main(int argc, char* argv[]) {
 		CHECK_DERR(cudaMemcpy(yd[i], y[i], 10 * sizeof(float), cudaMemcpyHostToDevice))
 	}
 	for (int e = 0; e < E; e++) {
-		ForwardGPU(xbd, z_1, w1, S, F, U1);       // Forward Pass with Sigmoid activation
+		ForwardGPU(&(xbd[(S/E)*e]), z_1, w1, S/E, F, U1);       // Forward Pass with Sigmoid activation
 
-		SigmoidAct(z_1, y_1, S, U1);
+		SigmoidAct(z_1, y_1, S/E, U1);
 
 		//============================ Output Layer =====================================//
 
@@ -192,25 +197,25 @@ int main(int argc, char* argv[]) {
 		// outtput units will have different probabilites
 		// Our goal would be to have the correct unit have the highest probability of 1.
 
-		ForwardGPU(y_1, z_O, wO, S, U1, UL);            // Forward Pass
-		NormExp(z_O, y_O, S, UL);                       // Normalized Exponential Activation
+		ForwardGPU(y_1, z_O, wO, S/E, U1, UL);            // Forward Pass
+		NormExp(z_O, y_O, S/E, UL);                       // Normalized Exponential Activation
 
 		//============================== Backpropagation =================================//
 		// In this implementation, we use categorical cross entropy cost
 		// The categorical cross entropy cost  = sum over all classes {y*ln(y_O)}
 
 
-		CatCrEnt(y, y_O, C, S, 10);                        // Categorical Cross Entropy Cost for all samples
+		CatCrEnt(&(y[(S/E)*e]), y_O, C, S/E, 10);                        // Categorical Cross Entropy Cost for all samples
 
 		// Since we are using BGD optimization we will be accumulating all the errors from all the
 		// training samples and averaging them in the w_updt matices in the backProp step.
 
 
 		// 1. Backpropagation at the Output Layer
-		backProp_O(yd, y_O, z_O, y_1, wO_updt, S, 10, U1);
+		backProp_O(&(yd[(S/E)*e]), y_O, z_O, y_1, delta1, wO_updt, S/E, 10, U1);
 
 		// 2. Backpropagation at the first Layer
-		backProp_H(xbd, yd, y_O, y_1, wO, w1_updt, S, U2, U1, 10);
+		backProp_H(&(xbd[(S/E)*e]), &(yd[(S/E)*e]), y_O, y_1, wO, delta1, w1_updt, S/E, U2, U1, 10);
 
 		updateW(w1, w1_updt, F, U1, eta);
 
@@ -218,45 +223,35 @@ int main(int argc, char* argv[]) {
 
 		updateW(wO, wO_updt, U1, UL, eta);
 	}
-
-	printf("Y_f1 [0][0] = %f\n", y_1[0][0]);
-	printf("Y_f1 [0][1] = %f\n", y_1[0][1]);
-	printf("Y_f1 [0][2] = %f\n", y_1[0][2]);
-	printf("Y_f1 [0][3] = %f\n", y_1[0][3]);
-	printf("\nY_O [0][0] = %f\n", y_O[0][0]);
-	printf("Y_O [0][1] = %f\n", y_O[0][1]);
-	printf("Y_O [0][2] = %f\n", y_O[0][2]);
-	printf("Y_O [0][3] = %f\n", y_O[0][3]);
-	printf("Y_O [0][3] = %f\n", y_O[0][4]);
-	printf("\nC [1][0] = %f\n", C[1][0]);
-	printf("C [2][0] = %f\n", C[2][0]);
-	printf("C [3][0] = %f\n", C[3][0]);
-	printf("C [4][0] = %f\n", C[4][0]);
-	printf("C [5][0] = %f\n", C[5][0]);
-	printf("\n W_O_updt[1][0] = %f\n", wO_updt[1][0]);
-	printf("W_O_updt[2][0] = %f\n", wO_updt[2][0]);
-	printf("W_O_updt[3][0] = %f\n", wO_updt[3][0]);
-	printf("W_O_updt[4][0] = %f\n", wO_updt[4][0]);
-	printf("W_O_updt[5][0] = %f\n", wO_updt[5][0]);
-	float sum =0.0;
-	for (int i = 0; i < 10; i++) {
-		sum += y_O[0][i];
+	printf("got\n");
+	for (int i = 0; i < 100; i++) {
+		for (int j = 0; j < UL; j++){
+			printf("  %f  ", y_O[i][j]);
+		}
+		printf("\n");
 	}
-	printf("\nSum of elements of y_O = %f\n", sum);
+	printf("expected\n");
+	for (int i = 0; i < 100; i++) {
+		for (int j = 0; j < UL; j++){
+			printf("  %f  ", y[i][j]);
+		}
+		printf("\n");
+	}
 	freeFloatMat(yd, S);
 	freeFloatMat(xbd, S);
 	freeFloatMat(x, S, true);
 	freeFloatMat(y, S, true);
 	free(y_num);
-	freeFloatMat(C, S, true);
+	freeFloatMat(C, S/E, true);
 	freeFloatMat(w1, F+1);
 	freeFloatMat(wO, U1+1);
 	freeFloatMat(w1_updt, F+1);
 	freeFloatMat(wO_updt, U1+1);
-	freeFloatMat(y_1, S);
-	freeFloatMat(y_O, S);
-	freeFloatMat(z_1, S);
-	freeFloatMat(z_O, S);
+	freeFloatMat(y_1, S/E);
+	freeFloatMat(y_O, S/E);
+	freeFloatMat(z_1, S/E);
+	freeFloatMat(z_O, S/E);
+	freeFloatMat(delta1, S/E);
 	return 0;
 }
 //==================================================
