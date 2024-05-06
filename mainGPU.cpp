@@ -266,12 +266,14 @@ int main(int argc, char* argv[]) {
 	free(y);
 	free(y_num);
 	freeFloatMat(C, S, true);
-	freeFloatMat(w1, F);
-	freeFloatMat(wO, U1);
+	freeFloatMat(w1, F+1);
+	freeFloatMat(wO, U1+1);
+	freeFloatMat(w1_updt, F+1);
+	freeFloatMat(wO_updt, U1+1);
 	freeFloatMat(y_1, S);
-	freeFloatMat(y_O, U1);
+	freeFloatMat(y_O, S);
 	freeFloatMat(z_1, S);
-	freeFloatMat(z_O, U1);
+	freeFloatMat(z_O, S);
 	return 0;
 }
 //==================================================
