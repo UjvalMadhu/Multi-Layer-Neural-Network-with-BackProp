@@ -18,18 +18,19 @@
 #endif
 
 // Constant Declaration
-const int Features = 784;     //Number of Input Features
-const int Samples  = 60000;   //Number of Samples
-const int U1       = 10;     //Number of Units of Layer 1
-const int U2       = 256;     //Number of Units of Layer 2
-const int UL       = 10;      //Number of Units in Output Layer
-const int EPOCHS   = 2;       //Number of Epochs
-const float eta    = 0.005;   //Learning Rate
+const int Features = 784;		  // Number of Input Features
+const int Samples  = 60000;		  // Number of Samples
+const int U1       = 100;		  // Number of Units of Layer 1
+const int UL       = 10;		  // Number of Units in Output Layer
+const int EPOCHS   = 3;          // Number of Epochs
+const int ITERS    = 20;		  // Number of Iterations
+const float eta    = 0.001;       // Learning Rate
 
 //========== M A I N   F U N C T I O N================
 
 int main(int argc, char* argv[]) {
 	
+	printf("\nNeural Network Engine for MNIST classification Started... \n\n");
 	// ======== Feature Extraction ============ //
 
 	// Training Dataset
@@ -68,11 +69,12 @@ int main(int argc, char* argv[]) {
 			X[i][j] = (float)(tmp/255.0);    // Normalizaing x 
 		}
 	}
-	printf("\nX[%d] = ", 1);
-	for (int i = 0; i < Features; i++) {
-		printf("%f \t", X[1][i] * 255);
-	}
-	printf("\nY[%d] = %f \n\n", 1, y_num[1]);
+	//printf("\nX[%d] = ", 1);
+	//for (int i = 0; i < Features; i++) {
+	//	printf("%f \t", X[1][i] * 255);
+	//}
+	//printf("\nY[%d] = %f \n\n", 1, y_num[1]);
+
 	 //Print Input and Output Values
 	/*for (int i = 0; i < F / 4; i++) {
 		printf("\n x[0][% d] = %f", i, x[0][i]);
@@ -110,35 +112,12 @@ int main(int argc, char* argv[]) {
 	//	printf("\n", i);
 	//}
 
-	const int F = 10;
-	const int S = 50;
+	const int F = 784;
+	const int S = 20000;
 	clock_t start, end;
 	float tCPU;
-
-	// Selcting a Batch of the training data;
-	float** x = allocFloatMat(S,F);
-	
-	for (int i = 0; i < S; i++) {
-		for (int j = 0; j < F; j++) {
-			x[i][j] = X[i][j+155];
-		}
-	}
-
-	for (int sam = 0; sam < 2; sam++) {
-		printf("\nX[%d] = ", sam);
-		for (int i = 0; i < F; i++) {
-			printf("%f \t", X[sam][i+155]*255);
-		}
-	}
-
+	float** x = allocFloatMat(S, F);
 	float** y = allocFloatMat(S, UL);
-
-	for (int i = 0; i < S; i++) {
-		for (int j = 0; j < UL; j++) {
-			y[i][j] = Y[i][j];
-		}
-	}
-
 
 	//======================= WEIGHT MATRICES ==========================//
 
@@ -150,21 +129,21 @@ int main(int argc, char* argv[]) {
 	}
 
 	// w1_updt: Layer 1 Weight Updation Matrix Memory Allocation
-	float** w1_updt = WeightGen(F, U1);
+	float** w1_updt = allocFloatMat(F+1, U1);
 	if (w1_updt == NULL) {
 		printf("\n Layer 1 Weight Matrix Allocation Error \n");
 		exit(1);
 	}
 
 	// wO_updt: Output Layer Weight Updation Matrix Memory Allocation
-	float** wO_updt = WeightGen(U1, 10);
+	float** wO_updt = allocFloatMat(U1+1, UL);
 	if (wO_updt == NULL) {
 		printf("\n Layer 1 Weight Matrix Allocation Error \n");
 		exit(1);
 	}
 
 	// wO: Output Layer Weight Vector Memory Allocation
-	float** wO = WeightGen(U1, 10);
+	float** wO = WeightGen(U1, UL);
 	if (wO == NULL) {
 		printf("\n Layer 1 Weight Matrix Allocation Error \n");
 		exit(1);
@@ -185,25 +164,44 @@ int main(int argc, char* argv[]) {
 	}
 
 	// z_O: Output layer units, 10 in number
-	float** z_O = allocFloatMat(S, 10);
+	float** z_O = allocFloatMat(S, UL);
 	if (z_O == NULL) {
 		printf("\n Output Layer Z Units Matrix Allocation Error \n");
 		exit(1);
 	}
 
 	// y_O: Output layer units, 10 in number
-	float** y_O = allocFloatMat(S, 10);
+	float** y_O = allocFloatMat(S, UL);
 	if (y_O == NULL) {
 		printf("\n Output Layer Y Units Matrix Allocation Error \n");
 		exit(1);
 	}
 
+	// Cost Vector
 	float** C = allocFloatMat(S, 1);
 	if (C == NULL) {
 		printf("Memory Allocation Error for Cost C");
 		exit(1);
 	}
 	
+	
+	// Dervivative product (dC/dY_O)(dY_O/dZ_O) for Back_Prop at Output Layer
+	float** delta1 = allocFloatMat(S, UL);
+	if (delta1 == NULL) {
+		printf("Memory Allocation Error for backprop_O");
+	}
+
+
+	// Sum{(dC/dY_O)(dY_O/dZ_O)(dZ_O/dY_1)}(dY_1/dZ_1) for Back_Prop at L-1 Hidden Layer = U1
+	float** delta2 = allocFloatMat(S, U1);
+	if (delta2 == NULL) {
+		printf("Memory Allocation Error for backprop_O");
+	}
+
+
+	int sam_index  = 0;
+	int feat_index = 0;
+
 	// The Implementation will be using Batch Gradient Descent Optimization
 	// 
 	// 
@@ -213,152 +211,176 @@ int main(int argc, char* argv[]) {
 	// Iterating over the number of Epochs
 	start = clock();
 	for (int ep = 0; ep < EPOCHS; ep++) {
-		// 
-		// ============================= Forward Pass ==================================// 
-		// 
-		//=============================== Layer One ===================================//
 
-		printf("\n****** Layer 1 Epoch: %d ******\n", ep);
+		sam_index += S;
+		//feat_index += 78;
 
-		for (int sam = 0; sam < 2; sam++) {
-			printf("\nx[%d] = ", sam);
-			for (int i = 0; i < F; i++) {
-				printf("%f \t", x[sam][i]);
+		
+		// Selcting a Batch of the training data;
+		
+		for (int i = sam_index; i < S; i++) {
+			for (int j = 0; j < F; j++) {
+				x[i][j] = X[i][j + 155];
 			}
 		}
 
-		for (int sam = 0; sam < F+1; sam++) {
-			printf("\n w1[%d] = ", sam);
-			for (int i = 0; i < 3; i++) {
-				printf("%f \t", w1[sam][i]);
+		// for (int sam = 0; sam < 2; sam++) {
+		//	printf("\nX[%d] = ", sam);
+		//	for (int i = 0; i < F; i++) {
+		//		printf("%f \t", X[sam][i+155]*255);
+		//	}
+		//}
+
+		
+
+		for (int i = sam_index; i < S; i++) {
+			for (int j = 0; j < UL; j++) {
+				y[i][j] = Y[i][j];
 			}
 		}
 
-		ForwardCPU(x, z_1, w1, S, F, U1);       // Forward Pass with Sigmoid activation
-		SigmoidAct(z_1, y_1, S, U1);
+		for (int itr = 0; itr < ITERS; itr++) {
+			// 
+			// ============================= Forward Pass ==================================// 
+			// 
+			//=============================== Layer One ===================================//
 
-		for (int sam = 0; sam < 2; sam++) {
-			printf("\nZ_1[%d] = ", sam);
-			for (int i = 0; i < U1; i++) {
-				printf("%f \t", z_1[sam][i]);
-			}
-		}
+			printf("\n****** Layer 1 Epoch: %d Iteration %d/ %d ******\n", ep, itr,ITERS);
 
-		printf("\n\n");
-
-		for (int sam = 0; sam < 2; sam++) {
-			printf("\nY_1[%d] = ", sam);
-			for (int i = 0; i < U1; i++) {
-				printf("%f \t", y_1[sam][i]);
-			}
-		}
-
-		printf("\n\n");
-		printf("\n****** Output layer Epoch: %d ******\n", ep);
-		//============================ Output Layer =====================================//
-
-		// The output layer does not use the sigmoid activation function but
-		// uses the Normalized Exponential Activation so that the total sum of
-		// all Output values of the network for a given sample = 1 and individual
-		// output units will have different probabilites
-		// Our goal would be to have the correct unit give the highest probability of 1.
-
-		ForwardCPU(y_1, z_O, wO, S, U1, UL);			// Forward Pass
-		NormExp(z_O, y_O, S, UL);                       // Normalized Exponential Activation
-
-		for (int sam = 0; sam < 2; sam++) {
-			printf("\nZ_O[%d] = ", sam);
-			for (int i = 0; i < UL; i++) {
-				printf("%f", z_O[sam][i]);
-			}
-		}
-		printf("\n\n");
-
-		for (int sam = 0; sam < 2; sam++) {
-			printf("\nY_O[%d] = ", sam);
-			for (int i = 0; i < UL; i++) {
-				printf("%f", y_O[sam][i]);
-			}
-		}
-
-		//============================== Backpropagation =================================//
-		// In this implementation, we use categorical cross entropy cost
-		// The categorical cross entropy cost  = sum over all classes {y*ln(y_O)}
-
-		CatCrEnt(y, y_O, C, S, UL);						// Categorical Cross Entropy Cost for all samples
-
-
-		float cost = 0.0;
-		for (int sam = 0; sam < S; sam++) {
-			cost += C[sam][0];
-		}
-		cost = cost / S;
-		//Printing Cost value
-
-
-		printf("\n\n****** Epoch %d: Cost = %f *******\n\n", ep, cost);
-
-		/*for (int sam = 0; sam < S; sam++) {
-			printf("\nCost = %f", C[sam][0]);
-		}
-		printf("\n\n");
-		for (int sam = 0; sam < S; sam++) {
-			for(int i = 0; i < 10; i++){
-			printf("\nY[%d][%d] = %f",sam,i ,y[sam][i]);
-			}
-		}
-		printf("\n\n");
-		for (int sam = 0; sam < S; sam++) {
-			for (int i = 0; i < 10; i++) {
-				printf("\nY_O[%d][%d] = %f", sam, i, y_O[sam][i]);
-			}
-		}*/
-
-		// Since we are using BGD optimization we will be accumulating all the errors from all the 
-		// training samples and averaging them in the w_updt matices in the backProp step.
-
-		// 1. Backpropagation at the Output Layer
-		backProp_O(y, y_O, z_O, y_1, wO_updt, S, 10, U1);
-
-		// 2. Backpropagation at the first Layer
-		backProp_H(x, y, y_O, y_1, wO, w1_updt, S, F, U1, 10);
-
-
-
-		//=============================  Weight Updation ================================//
-
-		// 1. w1: F x U1
-
-		updateW(w1, w1_updt, F, U1, eta);
-
-		// 2. w2: U1 x 10
-
-		updateW(wO, wO_updt, U1, UL, eta);
-
-
-		if (ep == 1 || ep == 100) {
-			printf("\n Predicted Output at Epoch = %d\n", ep);
-			for (int i = 0; i < 10; i++) {
-				for (int j = 0; j < UL; j++){
-					printf("  %f  ", y_O[i][j]);
+			for (int sam = 0; sam < 3; sam++) {
+				printf("\nx[%d] = ", sam);
+				for (int i = 0; i < F; i++) {
+					printf("%f \t", x[sam][i]);
 				}
-				printf("\n");
+			}
+			printf("\n\n");
+
+			for (int sam = 0; sam < F+1; sam++) {
+				printf("\n w1[%d] = ", sam);
+				for (int i = 0; i < 3; i++) {
+					printf("%f \t", w1[sam][i]);
+				}
 			}
 
-			printf("\n Target Output \n");
-			for (int i = 0; i < 10; i++) {
-				for (int j = 0; j < UL; j++) {
-					printf("  %f  ", y[i][j]);
+			printf("\n\n");
+
+			ForwardCPU(x, z_1, w1, S, F, U1);       // Forward Pass with Sigmoid activation
+			SigmoidAct(z_1, y_1, S, U1);
+
+			for (int sam = 0; sam < 2; sam++) {
+				printf("\nZ_1[%d] = ", sam);
+				for (int i = 0; i < U1; i++) {
+					printf("%f \t", z_1[sam][i]);
 				}
-				printf("\n");
+			}
+
+			printf("\n\n");
+
+			for (int sam = 0; sam < 2; sam++) {
+				printf("\nY_1[%d] = ", sam);
+				for (int i = 0; i < U1; i++) {
+					printf("%f \t", y_1[sam][i]);
+				}
+			}
+
+			printf("\n\n");
+			printf("\n****** Output layer Epoch: %d Iteration %d/ %d ******\n", ep, itr , ITERS);
+			//============================ Output Layer =====================================//
+
+			// The output layer does not use the sigmoid activation function but
+			// uses the Normalized Exponential Activation so that the total sum of
+			// all Output values of the network for a given sample = 1 and individual
+			// output units will have different probabilites
+			// Our goal would be to have the correct unit give the highest probability of 1.
+
+
+			ForwardCPU(y_1, z_O, wO, S, U1, UL);			// Forward Pass
+			NormExp(z_O, y_O, S, UL);                       // Normalized Exponential Activation
+
+
+			//============================== Backpropagation =================================//
+			// In this implementation, we use categorical cross entropy cost
+			// The categorical cross entropy cost  = sum over all classes {y*ln(y_O)}
+
+			CatCrEnt(y, y_O, C, S, UL);						// Categorical Cross Entropy Cost for all samples
+
+
+			float cost = 0.0;
+			for (int sam = 0; sam < S; sam++) {
+				cost += C[sam][0];
+			}
+			cost = cost / S;
+			//Printing Cost value
+
+
+			if (itr % 1 == 0) {
+				printf("\n\n****** Epoch %d / %d, Iteration = %d/%d Cost = %f *******\n\n", ep, EPOCHS, itr,ITERS, cost);
+			}
+
+
+			// Clearing the update matrices here as it would need similar computation in the for loop
+			clearFloatMat(w1_updt, F+1, U1);
+			clearFloatMat(wO_updt, U1+1, UL);
+			clearFloatMat(delta1, S, UL);
+			clearFloatMat(delta2, S, U1);
+
+
+
+			// Since we are using BGD optimization we will be accumulating all the errors from all the 
+			// training samples and averaging them in the w_updt matices in the backProp step.
+
+
+			// 1. Backpropagation at the Output Layer
+			backProp_O(y, y_O, z_O, y_1, delta1, wO_updt, S, UL, U1);
+
+
+			// 2. Backpropagation at the first Layer
+			backProp_H(x, y, y_O, y_1, wO, delta1, delta2, w1_updt, S, F, U1, UL);
+
+
+			//=============================  Weight Updation ================================//
+
+			//printf("\n\n");
+			//printf("****** Updating weights at Iteration %d/ %d ******\n", itr , ITERS);
+			//printf("\n\n");
+
+			// 1. w1: F x U1
+
+			updateW(w1, w1_updt, F+1, U1, eta);
+
+			// 2. w2: U1 x 10
+
+			updateW(wO, wO_updt, U1+1, UL, eta);
+
+			
+
+			if (ep%10 == 0 || ep == EPOCHS-1) {
+				printf("\n Predicted Output at Epoch = %d\n", ep);
+				for (int i = 0; i < S; i++) {
+					for (int j = 0; j < UL; j++){
+						printf("  %f  ", y_O[i][j]);
+					}
+					printf("\n");
+				}
+
+				printf("\n Target Output \n");
+				for (int i = 0; i < S; i++) {
+					for (int j = 0; j < UL; j++) {
+						printf("  %f  ", y[i][j]);
+					}
+					printf("\n");
+				}
 			}
 		}
 
 	}
+
+
 	end = clock();
 	tCPU = (float)(end - start) * 1000 / (float)CLOCKS_PER_SEC;
 
 	printf("\n\n Total Time taken for %d EPOCHS = %f ms", EPOCHS, tCPU);
+
 
 	//
 	// Free Memory Allocation
@@ -390,12 +412,25 @@ float** allocFloatMat(int i, int j) {
 		return mat;
 	}
 	for (int ii = 0; ii < i; ii++) {
-		mat[ii] = (float*)malloc(j * sizeof(float));
+		mat[ii] = (float*) malloc(j * sizeof(float));
 		if (mat[ii] == NULL) {
 			return (float**)mat[ii];
 		}
 	}
 	return mat;
+}
+
+// ClearFloatMat: Sets all the elements of a Matrix to zero
+// i = Number of Rows
+// j = Number of Columns
+// mat = Double pointer of matrix
+
+void clearFloatMat(float** mat, int i, int j) {
+	for (int ii = 0; ii < i; ii++) {
+		for (int jj = 0; jj < j; jj++) {
+			mat[ii][jj] = 0;
+		}
+	}
 }
 
 // freeFloatMat: Frees the memory allocated for a Matrix
@@ -431,6 +466,7 @@ float forward(float* x, float* w, int F) {
 	sum += w[0];
 	return sum; //sigmoid(sum);
 }
+
 
 // WeightGen(U , F): Creates a weight matrix + the bias term for each unit, and 
 // assigns random values to the elements
@@ -613,3 +649,115 @@ float** WeightGen(int F, int U) {
 	}
 	printf("\nSum of elements of y_O = %f\n", sum);
 	*/
+
+	/*for (int sam = 0; sam < S; sam++) {
+		printf("\nCost = %f", C[sam][0]);
+	}
+	printf("\n\n");
+	for (int sam = 0; sam < S; sam++) {
+		for(int i = 0; i < 10; i++){
+		printf("\nY[%d][%d] = %f",sam,i ,y[sam][i]);
+		}
+	}
+	printf("\n\n");
+	for (int sam = 0; sam < S; sam++) {
+		for (int i = 0; i < 10; i++) {
+			printf("\nY_O[%d][%d] = %f", sam, i, y_O[sam][i]);
+		}
+	}*/
+
+	//printf("\n\n");
+	//printf("****** BackPropagation 2******\n");
+	//printf("\n\n");
+
+	//for (int sam = 0; sam < F + 1; sam++) {
+	//	printf("\n w1[%d] = ", sam);
+	//	for (int i = 0; i < U1; i++) {
+	//		printf("%f \t", w1[sam][i]);
+	//	}
+	//}
+	//printf("\n\n");
+
+	//for (int j = 0; j < S; j++) {
+	//	printf("\n delta2[%d] = ", j);
+	//	for (int i = 0; i < U1; i++) {
+	//		printf("%f \t", delta2[j][i]);
+	//	}
+	//}
+	//printf("\n\n");
+
+	//for (int sam = 0; sam < F + 1; sam++) {
+	//	printf("\n w1_updt[%d] = ", sam);
+	//	for (int i = 0; i < U1; i++) {
+	//		printf("%f \t", w1_updt[sam][i]);
+	//	}
+	//}
+	//printf("\n\n");
+
+			//printf("\n\n");
+
+			//for (int sam = 0; sam < U1 + 1; sam++) {
+			//	printf("\n wO[%d] = ", sam);
+			//	for (int i = 0; i < UL; i++) {
+			//		printf("%f \t", wO[sam][i]);
+			//	}
+			//}
+			//printf("\n\n");
+
+			//for (int sam = 0; sam < S; sam++) {
+			//	printf("\nZ_O[%d] = ", sam);
+			//	for (int i = 0; i < UL; i++) {
+			//		printf("%f \t", z_O[sam][i]);
+			//	}
+			//}
+			//printf("\n\n");
+
+			//for (int sam = 0; sam < S; sam++) {
+			//	printf("\nY_O[%d] = ", sam);
+			//	for (int i = 0; i < UL; i++) {
+			//		printf("%f \t", y_O[sam][i]);
+			//	}
+			//}
+
+//printf("\n\n");
+//printf("****** BackPropagation 1******\n");
+//printf("\n\n");
+//
+//for (int j = 0; j < U1 + 1; j++) {
+//	printf("\n wO[%d] = ", j);
+//	for (int i = 0; i < UL; i++) {
+//		printf("%f \t", wO[j][i]);
+//	}
+//}
+//printf("\n\n");
+//
+//for (int j = 0; j < S; j++) {
+//	printf("\n delta1[%d] = ", j);
+//	for (int i = 0; i < UL; i++) {
+//		printf("%f \t", delta1[j][i]);
+//	}
+//}
+//printf("\n\n");
+//
+//for (int j = 0; j < U1 + 1; j++) {
+//	printf("\n wO_updt[%d] = ", j);
+//	for (int i = 0; i < UL; i++) {
+//		printf("%f \t", wO_updt[j][i]);
+//	}
+//}
+//printf("\n\n");
+
+			//for (int j = 0; j < U1 + 1; j++) {
+			//	printf("\n wO[%d] = ", j);
+			//	for (int i = 0; i < UL; i++) {
+			//		printf("%f \t", wO[j][i]);
+			//	}
+			//}
+			//printf("\n\n");
+
+			//for (int sam = 0; sam < F + 1; sam++) {
+			//	printf("\n w1[%d] = ", sam);
+			//	for (int i = 0; i < U1; i++) {
+			//		printf("%f \t", w1[sam][i]);
+			//	}
+			//}
